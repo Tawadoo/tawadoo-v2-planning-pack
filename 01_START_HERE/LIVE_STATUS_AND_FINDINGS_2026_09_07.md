@@ -91,3 +91,47 @@ Rough progress: functional ~50-55% · structural refactor ~5-10% (only S141 sche
 6. Any drift you see between the stated North Star (refactor-first) and what we're actually doing (a lot of investigation + stabilization).
 
 Challenge us where the evidence warrants. The point of this repo is an independent second opinion, because Kiro created some of the original mess.
+
+
+---
+---
+# ADDENDUM — UPDATE @ 2026-09-07 (later same day): S-CTO-29 LANDED + LIVE FEED INCIDENT FULLY RECALLED
+**This addendum supersedes §6 "in flight" above. Read it — it changes the picture materially.**
+
+## A. S-CTO-29-PLATFORM-TRUTH-360 — LANDED, QA-ACCEPTED (status: FINISHED — INCOMPLETE)
+The full read-only platform truth map is done (evidence indexed at `08_SESSION_EVIDENCE/S_CTO_29_PLATFORM_TRUTH_360_EVIDENCE_2026_09_07.md`). It did the truth map AND caught a live provider-ban risk mid-session, then took founder-authorized emergency action. Brain (B23) verified every action against live AWS.
+
+## B. 🔴 THE FEED INCIDENT (the important one)
+- **What was wrong:** the STAGING feed cron was writing the live Meta product feed INTO THE PRODUCTION media bucket `tw-prod-media-storage-prod` (tagged env=prod, publicly readable by Meta). This is the exact path that caused the earlier Google Merchant (GMC) suspension — staging TEST products reaching a real provider.
+- **How it got there (CloudTrail):** a `kiro-ai` session on 2026-07-31 created the EventBridge feed crons ALREADY ENABLED — "born live," never a deliberate switch. Classed as a black-area violation.
+- **Founder order:** empty ALL staging feeds entirely — nothing from staging should be on Meta/TikTok/Google (all bullshit test products).
+- **DONE + VERIFIED (2026-09-07):** ALL 40 staging feed files emptied to `[]` (verified: 0 non-empty remain). Only Meta ever had files (google/tiktok/chatgpt = 0 objects). Both feed crons (`tw-cron-feed-generation`, `tw-cron-store-video`) DISABLED. Backup saved at `feeds/_recall_backup_S29/`. Prod MCP/ChatGPT untouched.
+- **FOUNDER DECISION:** LEAVE IT — do NOT add a `FEEDS_ENABLED` code gate. Founder controls the risk by controlling what listings are created on staging. So no code change; the durable-gate task is closed per founder.
+- **Known residual (founder-accepted):** an in-app Bull cron `generate-all-feeds` re-registers on container boot (`feed-generator.service.ts:156`) → a staging back-container restart COULD regenerate feeds into the prod bucket again. Founder accepts + mitigates by controlling staging listing creation. The prod-media-bucket env-boundary defect stays a cutover-checklist item only.
+
+## C. PLATFORM TRUTH — the naming/dormant reality (source + live DB verified)
+- **Scale:** 60,001 entities (57,356 individual + 2,645 store; NO `isPremium` column — premium is DERIVED from an active syndication subscription, only 3 active). 24,975 publications (21,451 published). Public-visible = 19,875. Index/feed-eligible = 20,033.
+- **FLAG TRUTH (this kills the guessing the founder warned about):**
+  - `isVerified` = the PUBLIC-VISIBILITY gate (page + search).
+  - `isModerated` = the INDEX/FEED-eligibility gate (population), NOT the same as verified.
+  - `is_live` = **DEAD** (0 rows, no reader; auctions use a separate `ta_publication_live` table).
+  - `active` = **near-vestigial delete-tombstone** (false only on hard-delete). It is NOT a feed/boost slot — this was the founder's exact assumption, now DISPROVEN. "active" has ≥9 different meanings across entities.
+- **The 158 mystery rows:** moderated-but-not-verified published rows — origin = a legacy migration (`BackfillIsModerated`), NOT any runtime approve/publish. They're in the index + feed-eligible but 404 on the page and excluded from search (not verified). Decision-ready: verify them or reset is_moderated. No fix taken.
+- **SLOT truth (founder's core question):** a "slot" = an active `ta_syndication_campaign_product` row under a subscription's `max_live_items`, backed by a live subscription OR a live boost. The whole system is called **"syndication"** in code (no "distribution/catalogue/feed" module). **Only 1 live slot platform-wide. No auto rotation/swap.** CRITICAL: distribution is GATED behind a purchased package/boost — NOT automatic for every eligible listing. **This CONTRADICTS the founder's stated policy ("silently distribute every eligible listing").** → founder to reconcile intent vs current code.
+- **Storefronts:** Classic + Smart both call the same `publications/search` API; Smart is correctly a SEPARATE additive layer (no Classic import); MCP is live at prod and resolves to the same `/{locale}/p/{slug}`.
+- **Monetization:** `ta_monetization_config` table DOES NOT EXIST (constants hardcoded; free tier = 5 items). Trial service LIVE but 0 claimed. Store-video built + cron but social autopost is DRY-RUN gated. Coin orders: 129 PENDING, **0 PAID** on staging.
+- **🟠 Sovereignty gaps (flagged, not confirmed):** (a) MCP logs interactions to a LOCAL sqlite/JSONL sink — no `ta_analytics_event` write found (possible Commandment-2 violation); (b) the `for-you` API has no server-side lake write (client impression only).
+
+## D. QUEUED FROM S-CTO-29 (Brain owns; nothing buried)
+- P0: (feed durable-gate = CLOSED per founder). Env-boundary (staging→prod bucket) = cutover-checklist item.
+- P1: MCP + for-you sovereignty investigation.
+- P2: the 158-row decision; document `is_live` DEAD + `active` tombstone.
+- P3: image-index health, index-alias target (publications_2 vs -v2), autopost env value, prod-parity of findings.
+
+## E. WHERE THE NAV UNIT STANDS NOW
+Unchanged from §2 above: the SSR verified-visibility fix is CODED + PARKED (not deployed, HOLD). The NAV unit is gated to complete end-to-end before the FR wave. S-CTO-29 gives the truth foundation (flag meanings, slot reality, the 158 rows) needed to build the remaining NAV waves on understanding, not assumption.
+
+## F. SPECIFIC QUESTIONS FOR CHATGPT (in addition to §9 above)
+7. The "silently distribute every eligible listing" policy vs the code reality (distribution gated behind paid package/boost, only 1 live slot) — which should win, and what's the right target model?
+8. The feed incident root cause (staging writing the prod bucket, crons born-enabled by an agent) — beyond the recall, what's the minimal durable guard you'd insist on before prod cutover, given the founder declined a code gate for now?
+9. Given ~40% of the "platform" is dormant/dead (feeds except Meta, trials, social autopost, paid coins, monetization-config, 8 of 9 slot channels) — is the right move to WIRE these before refactor, DEFER them, or DELETE the dead ones? How would you sequence it against the refactor-first North Star?
